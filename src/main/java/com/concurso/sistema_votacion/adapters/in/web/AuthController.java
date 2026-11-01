@@ -8,6 +8,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.concurso.sistema_votacion.ports.in.GestionLlavesJuezUseCase;
+import com.concurso.sistema_votacion.ports.in.GestionLlavesPintorUseCase;
+import com.concurso.sistema_votacion.ports.in.GestionLlavesPresidenteUseCase;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -15,6 +19,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HexFormat;
 import java.util.Map;
 
@@ -24,6 +29,19 @@ public class AuthController {
 
 	@Value("${spring.datasource.url:jdbc:sqlite:db/votacion.db}")
 	private String dbUrl;
+
+	private final GestionLlavesJuezUseCase gestionLlavesJuezUseCase;
+	private final GestionLlavesPintorUseCase gestionLlavesPintorUseCase;
+	private final GestionLlavesPresidenteUseCase gestionLlavesPresidenteUseCase;
+
+	public AuthController(
+			GestionLlavesJuezUseCase gestionLlavesJuezUseCase,
+			GestionLlavesPintorUseCase gestionLlavesPintorUseCase,
+			GestionLlavesPresidenteUseCase gestionLlavesPresidenteUseCase) {
+		this.gestionLlavesJuezUseCase = gestionLlavesJuezUseCase;
+		this.gestionLlavesPintorUseCase = gestionLlavesPintorUseCase;
+		this.gestionLlavesPresidenteUseCase = gestionLlavesPresidenteUseCase;
+	}
 
 	@PostMapping("/login")
 	public ResponseEntity<?> login(@RequestBody Map<String, String> credenciales) {
@@ -39,6 +57,10 @@ public class AuthController {
 			byte[] hashBytes = digest.digest(password.getBytes(StandardCharsets.UTF_8));
 			String passwordHash = HexFormat.of().formatHex(hashBytes);
 
+			int idUsuario;
+			String nombreUsuario;
+			String rol;
+
 			try (Connection conn = DriverManager.getConnection(dbUrl);
 					PreparedStatement ps = conn.prepareStatement(
 							"SELECT id, nombre_usuario, rol FROM USUARIOS WHERE nombre_usuario = ? AND password_hash = ?")) {
@@ -48,17 +70,29 @@ public class AuthController {
 
 				try (ResultSet rs = ps.executeQuery()) {
 					if (rs.next()) {
-						return ResponseEntity.ok(Map.of(
-								"id", rs.getInt("id"),
-								"nombre_usuario", rs.getString("nombre_usuario"),
-								"rol", rs.getString("rol")
-						));
+						idUsuario = rs.getInt("id");
+						nombreUsuario = rs.getString("nombre_usuario");
+						rol = rs.getString("rol");
 					} else {
 						return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
 								.body(Map.of("mensaje", "Usuario o contraseña incorrectos"));
 					}
 				}
 			}
+
+			// Asegurar llaves según el rol del usuario que inicia sesión
+			if ("JUEZ".equalsIgnoreCase(rol)) {
+				gestionLlavesJuezUseCase.asegurarLlavesJuez(idUsuario, nombreUsuario);
+			} else if ("PINTOR".equalsIgnoreCase(rol)) {
+				gestionLlavesPintorUseCase.asegurarLlavesPintor(idUsuario, nombreUsuario);
+			} else if ("PRESIDENTE".equalsIgnoreCase(rol)) {
+				gestionLlavesPresidenteUseCase.asegurarLlavesPresidente(idUsuario);
+			}
+
+			return ResponseEntity.ok(Map.of(
+					"id", idUsuario,
+					"nombre_usuario", nombreUsuario,
+					"rol", rol));
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 					.body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
@@ -82,21 +116,37 @@ public class AuthController {
 			byte[] hashBytes = digest.digest(password.getBytes(StandardCharsets.UTF_8));
 			String passwordHash = HexFormat.of().formatHex(hashBytes);
 
+			int nuevoUsuarioId;
+
 			try (Connection conn = DriverManager.getConnection(dbUrl);
 					PreparedStatement ps = conn.prepareStatement(
-							"INSERT INTO USUARIOS (nombre_usuario, rol, password_hash, fecha_creacion) VALUES (?, ?, ?, datetime('now', 'localtime'))")) {
+							"INSERT INTO USUARIOS (nombre_usuario, rol, password_hash, fecha_creacion) VALUES (?, ?, ?, datetime('now', 'localtime'))",
+							Statement.RETURN_GENERATED_KEYS)) {
 
 				ps.setString(1, usuarioMayusculas);
 				ps.setString(2, rolFijo);
 				ps.setString(3, passwordHash);
 				ps.executeUpdate();
 
-				return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-						"mensaje", "Cuenta creada exitosamente",
-						"nombre_usuario", usuarioMayusculas,
-						"rol", rolFijo
-				));
+				try (ResultSet keys = ps.getGeneratedKeys()) {
+					if (keys.next()) {
+						nuevoUsuarioId = keys.getInt(1);
+					} else {
+						throw new IllegalStateException("No se pudo obtener el ID del nuevo usuario.");
+					}
+				}
 			}
+
+			// Generar las llaves EC del Pintor recién registrado:
+			// - Llave pública en la base de datos (LLAVES_EC)
+			// - Llave privada en claves_usuarios/Pintores/<NombreUsuario>/<NombreUsuario>_priv.pem
+			gestionLlavesPintorUseCase.asegurarLlavesPintor(nuevoUsuarioId, usuarioMayusculas);
+
+			return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+					"mensaje", "Cuenta creada exitosamente",
+					"nombre_usuario", usuarioMayusculas,
+					"rol", rolFijo
+			));
 		} catch (SQLException e) {
 			if (e.getMessage() != null && e.getMessage().contains("UNIQUE")) {
 				return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -110,4 +160,3 @@ public class AuthController {
 		}
 	}
 }
-
