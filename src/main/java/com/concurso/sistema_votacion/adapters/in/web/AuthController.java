@@ -1,4 +1,4 @@
-package com.concurso.sistema_votacion;
+package com.concurso.sistema_votacion.adapters.in.web;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -51,7 +51,8 @@ public class AuthController {
 						return ResponseEntity.ok(Map.of(
 								"id", rs.getInt("id"),
 								"nombre_usuario", rs.getString("nombre_usuario"),
-								"rol", rs.getString("rol")));
+								"rol", rs.getString("rol")
+						));
 					} else {
 						return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
 								.body(Map.of("mensaje", "Usuario o contraseña incorrectos"));
@@ -93,7 +94,8 @@ public class AuthController {
 				return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
 						"mensaje", "Cuenta creada exitosamente",
 						"nombre_usuario", usuarioMayusculas,
-						"rol", rolFijo));
+						"rol", rolFijo
+				));
 			}
 		} catch (SQLException e) {
 			if (e.getMessage() != null && e.getMessage().contains("UNIQUE")) {
@@ -108,3 +110,4 @@ public class AuthController {
 		}
 	}
 }
+
