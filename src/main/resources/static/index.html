@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painting Competition</title>
+</head>
+
+<body>
+    <header style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;">
+        <div id="infoUsuario" style="display: flex; align-items: center; gap: 10px;"></div>
+        <h1 style="margin: 0; text-align: center;">Painting Competition</h1>
+        <div id="accionSesion" style="text-align: right;"><a href="logIn.html">iniciar sesion</a></div>
+    </header>
+
+    <main>
+        <section>
+            <h2>Welcome to the Digital Painting Competition with a Cause!</h2>
+            <p>
+                Our artist foundation is organizing this digital painting competition with a
+                very special purpose: raising funds to buy school supplies for schools in small
+                towns. By participating, you not only showcase your artistic talent but also directly
+                support the education of hundreds of children.
+            </p>
+            <h2>Evaluation Process</h2>
+            <p>
+                The competition will be evaluated by a three-member jury. Each judge will rate the
+                paintings from one to three stars (1 star = not good enough, 2 stars = good, 3 stars
+                = outstanding) and provide comments to justify their decision.
+                To guarantee maximum transparency and fairness, the chairman of the jury will validate
+                every evaluation using a blind signature, ensuring the votes are legitimate without
+                seeing their actual content. At the end of the competition, all evaluations will
+                be publicly disclosed and verified.
+                The three artists with the most stars will be crowned our winners!
+            </p>
+            <h2>Requirements to Participate</h2>
+            <p>
+            <ul>
+                <li>Registration and Consent: Complete the official registration and sign a consent
+                    form authorizing the storage and publication of your digital artwork.</li>
+
+                <li>Artwork Encryption: You must encipher your digital painting file before submitting
+                    it to the system to guarantee its integrity.</li>
+
+                <li>Secure Key Exchange: Share the encrypted file with the jury and securely transmit
+                    the decryption key through our platform.</li>
+            </ul>
+            </p>
+        </section>
+    </main>
+
+    <script>
+        const sesionGuardada = sessionStorage.getItem('usuarioActivo');
+        if (sesionGuardada) {
+            const usuario = JSON.parse(sesionGuardada);
+            const infoUsuario = document.getElementById('infoUsuario');
+            const accionSesion = document.getElementById('accionSesion');
+
+            infoUsuario.innerHTML = `
+                <img src="user.svg" alt="Usuario" width="40" height="40">
+                <div>
+                    <div><strong>${usuario.nombre_usuario}</strong></div>
+                    <div>${usuario.rol}</div>
+                </div>
+            `;
+
+            accionSesion.innerHTML = `
+                <a href="index.html" id="btnCerrarSesion" style="margin-right: 15px;">cerrar sesion</a>
+                <a href="logIn.html">iniciar sesion</a>
+            `;
+
+            document.getElementById('btnCerrarSesion').addEventListener('click', function (e) {
+                e.preventDefault();
+                sessionStorage.removeItem('usuarioActivo');
+                window.location.href = 'index.html';
+            });
+        }
+    </script>
+</body>
+
+</html>
