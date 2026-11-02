@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painting Competition - Firma a Ciegas</title>
+    <style>
+        #tablaObrasJueces tr {
+            cursor: pointer;
+        }
+
+        #tablaObrasJueces tr.seleccionada {
+            background-color: #aed6f1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <header style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;">
+        <div id="infoUsuario" style="display: flex; align-items: center; gap: 10px;"></div>
+        <h1 style="margin: 0; text-align: center;">Painting Competition</h1>
+        <div style="text-align: right;">
+            <a href="index.html">inicio</a>
+        </div>
+    </header>
+
+    <main>
+        <section>
+            <h2>Acciones Presidente - Firma a Ciegas</h2>
+            <div>
+                <button type="button" id="btnCargarLlave">Cargar llave privada</button>
+                <input type="file" id="inputLlavePrivada" accept=".pem,.txt" style="display: none;">
+                <p id="nombreArchivoSeleccionado"></p>
+            </div>
+
+            <div style="margin-bottom: 10px;">
+                <input type="text" id="inputFiltroTabla" placeholder="Buscar por obra o juez...">
+                <label style="margin-left: 10px;">
+                    <input type="checkbox" id="chkSeleccionarTodo"> Seleccionar todo
+                </label>
+            </div>
+
+            <table border="1" cellpadding="8" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Nombre Obra</th>
+                        <th>Juez encargado</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaObrasJueces">
+                    <tr>
+                        <td>Sol amanecer</td>
+                        <td>Juez 1</td>
+                    </tr>
+
+                    <tr>
+                        <td>Sol amanecer</td>
+                        <td>Juez 2</td>
+                    </tr>
+
+                    <tr>
+                        <td>Sol amanecer</td>
+                        <td>Juez 3</td>
+                    </tr>
+
+                    <tr>
+                        <td>Noche Obscura</td>
+                        <td>Juez 1</td>
+                    </tr>
+
+                    <tr>
+                        <td>Noche Obscura</td>
+                        <td>Juez 2</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div id="contenedorFirmar" style="margin-top: 15px; display: none;">
+                <button type="button" id="btnFirmar">Firmar</button>
+            </div>
+            <p id="mensajeFirma" style="font-weight: bold;"></p>
+        </section>
+    </main>
+
+    <script>
+        const sesionGuardada = sessionStorage.getItem('usuarioActivo');
+        if (sesionGuardada) {
+            const usuario = JSON.parse(sesionGuardada);
+            const infoUsuario = document.getElementById('infoUsuario');
+            infoUsuario.innerHTML = `
+                <img src="user.svg" alt="Usuario" width="40" height="40">
+                <div>
+                    <div><strong>${usuario.nombre_usuario}</strong></div>
+                    <div>${usuario.rol}</div>
+                </div>
+            `;
+        }
+
+        const btnCargarLlave = document.getElementById('btnCargarLlave');
+        const inputLlavePrivada = document.getElementById('inputLlavePrivada');
+        const nombreArchivoSeleccionado = document.getElementById('nombreArchivoSeleccionado');
+
+        btnCargarLlave.addEventListener('click', function () {
+            inputLlavePrivada.click();
+        });
+
+        inputLlavePrivada.addEventListener('change', function () {
+            if (inputLlavePrivada.files.length > 0) {
+                nombreArchivoSeleccionado.textContent = 'Archivo seleccionado: ' + inputLlavePrivada.files[0].name;
+            }
+        });
+
+        const inputFiltroTabla = document.getElementById('inputFiltroTabla');
+        const chkSeleccionarTodo = document.getElementById('chkSeleccionarTodo');
+        const tablaObrasJueces = document.getElementById('tablaObrasJueces');
+        const contenedorFirmar = document.getElementById('contenedorFirmar');
+        const btnFirmar = document.getElementById('btnFirmar');
+        const mensajeFirma = document.getElementById('mensajeFirma');
+
+        function actualizarVisibilidadBotonFirmar() {
+            const seleccionadas = tablaObrasJueces.getElementsByClassName('seleccionada');
+            if (seleccionadas.length > 0) {
+                contenedorFirmar.style.display = 'block';
+            } else {
+                contenedorFirmar.style.display = 'none';
+                mensajeFirma.textContent = '';
+            }
+        }
+
+        function deseleccionarTodasLasFilas() {
+            const filas = tablaObrasJueces.getElementsByTagName('tr');
+            for (let i = 0; i < filas.length; i++) {
+                filas[i].classList.remove('seleccionada');
+            }
+            actualizarVisibilidadBotonFirmar();
+        }
+
+        chkSeleccionarTodo.addEventListener('change', function () {
+            const filas = tablaObrasJueces.getElementsByTagName('tr');
+            if (chkSeleccionarTodo.checked) {
+                for (let i = 0; i < filas.length; i++) {
+                    if (filas[i].style.display !== 'none') {
+                        filas[i].classList.add('seleccionada');
+                    }
+                }
+                actualizarVisibilidadBotonFirmar();
+            } else {
+                deseleccionarTodasLasFilas();
+            }
+        });
+
+        tablaObrasJueces.addEventListener('click', function (e) {
+            const fila = e.target.closest('tr');
+            if (!fila) return;
+
+            chkSeleccionarTodo.checked = false;
+            deseleccionarTodasLasFilas();
+            fila.classList.add('seleccionada');
+            actualizarVisibilidadBotonFirmar();
+        });
+
+        btnFirmar.addEventListener('click', function () {
+            mensajeFirma.textContent = 'APLICANDO FIRMA';
+        });
+
+        document.addEventListener('click', function (e) {
+            const clicEnCheckbox = chkSeleccionarTodo.parentElement.contains(e.target);
+            const clicEnBotonFirmar = contenedorFirmar.contains(e.target);
+            if (!tablaObrasJueces.contains(e.target) && !clicEnCheckbox && !clicEnBotonFirmar) {
+                chkSeleccionarTodo.checked = false;
+                deseleccionarTodasLasFilas();
+            }
+        });
+
+        inputFiltroTabla.addEventListener('input', function () {
+            const textoBusqueda = inputFiltroTabla.value.toLowerCase().trim();
+            const filas = tablaObrasJueces.getElementsByTagName('tr');
+
+            for (let i = 0; i < filas.length; i++) {
+                const celdas = filas[i].getElementsByTagName('td');
+                if (celdas.length >= 2) {
+                    const nombreObra = celdas[0].textContent.toLowerCase();
+                    const nombreJuez = celdas[1].textContent.toLowerCase();
+
+                    if (nombreObra.includes(textoBusqueda) || nombreJuez.includes(textoBusqueda)) {
+                        filas[i].style.display = '';
+                    } else {
+                        filas[i].style.display = 'none';
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
