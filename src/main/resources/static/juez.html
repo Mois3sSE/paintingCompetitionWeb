@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painting Competition - Panel del Juez</title>
+</head>
+
+<body>
+    <header>
+        <h1>Panel del Juez</h1>
+        <p id="infoUsuario"></p>
+        <a href="index.html">Inicio</a>
+    </header>
+
+    <main>
+        <section>
+            <h2>Catálogo de obras registradas</h2>
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Autor</th>
+                        <th>Archivo original</th>
+                        <th>Fecha de registro</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaObras"></tbody>
+            </table>
+            <p id="mensajeError" style="color: red; display: none;"></p>
+        </section>
+
+        <section>
+            <h2>Análisis de autenticidad e integridad (ECDSA)</h2>
+            <h3 id="resultadoTitulo"></h3>
+            <pre id="resultadoVerificacion"></pre>
+        </section>
+    </main>
+
+    <script>
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioActivo') || 'null');
+        if (!sesion || sesion.rol !== 'JUEZ') {
+            alert('Debe iniciar sesión como JUEZ.');
+            window.location.href = 'logIn.html';
+        }
+        document.getElementById('infoUsuario').textContent = 'Juez: ' + sesion.nombre_usuario;
+
+        function mostrarError(texto) {
+            const mensajeError = document.getElementById('mensajeError');
+            mensajeError.textContent = texto;
+            mensajeError.style.display = 'block';
+        }
+
+        async function cargarObras() {
+            const tabla = document.getElementById('tablaObras');
+            tabla.innerHTML = '';
+            const respuesta = await fetch('/api/obras/juez/' + sesion.id);
+            const obras = await respuesta.json();
+            if (!respuesta.ok) {
+                mostrarError(obras.mensaje || 'No se pudieron cargar las obras');
+                return;
+            }
+            for (const obra of obras) {
+                const fila = document.createElement('tr');
+                for (const valor of [obra.id, obra.titulo, obra.autorNombre, obra.nombreArchivoOriginal, obra.fechaRegistro]) {
+                    const celda = document.createElement('td');
+                    celda.textContent = valor;
+                    fila.appendChild(celda);
+                }
+                const celdaAccion = document.createElement('td');
+                const boton = document.createElement('button');
+                boton.textContent = 'Verificar firma';
+                boton.addEventListener('click', () => verificarFirma(obra.id));
+                celdaAccion.appendChild(boton);
+                fila.appendChild(celdaAccion);
+                tabla.appendChild(fila);
+            }
+        }
+
+        async function verificarFirma(obraId) {
+            const titulo = document.getElementById('resultadoTitulo');
+            const resultado = document.getElementById('resultadoVerificacion');
+            document.getElementById('mensajeError').style.display = 'none';
+            titulo.textContent = '';
+            resultado.textContent = '';
+
+            try {
+                const respuesta = await fetch('/api/obras/' + obraId + '/verificar-firma?usuarioId=' + sesion.id);
+                const r = await respuesta.json();
+                if (!respuesta.ok) {
+                    mostrarError(r.mensaje || 'Error al verificar la firma');
+                    return;
+                }
+                titulo.textContent = 'RESULTADO: ' + r.resultado;
+                titulo.style.color = r.valida ? 'green' : 'red';
+                resultado.textContent =
+                    'Obra seleccionada:        ' + r.titulo + ' (ID ' + r.obraId + ')\n' +
+                    'Pintor / Autor:           ' + r.pintor + '\n' +
+                    'Archivo de la obra:       ' + r.rutaImagenCifrada + '\n' +
+                    'Algoritmo de firma:       ' + r.algoritmo + '\n' +
+                    '--------------------------------------------------------------\n' +
+                    'Hash SHA-256 actual:      ' + (r.hashSha256Hex || '-') + '\n' +
+                    'Firma (BD, Base64):       ' + r.firmaBase64 + '\n' +
+                    'Llave pública pintor (BD):' + (r.llavePublicaPintorB64 || '-') + '\n' +
+                    '--------------------------------------------------------------\n' +
+                    '>> ' + r.mensaje + '\n' +
+                    'Prueba de integridad (1 byte alterado en memoria): ' +
+                    (r.pruebaAlteracionDetectada ? 'alteración DETECTADA (firma inválida) [OK]' : 'no aplica') +
+                    (r.valida ? '\n\nSiguiente paso: recuperar la llave AES (ECDH) y descifrar la imagen (Integrante 1).' : '');
+            } catch (error) {
+                mostrarError('No se pudo conectar con el servidor.');
+            }
+        }
+
+        cargarObras();
+    </script>
+</body>
+
+</html>

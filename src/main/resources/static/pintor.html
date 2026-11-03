@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painting Competition - Panel del Pintor</title>
+</head>
+
+<body>
+    <header>
+        <h1>Panel del Pintor</h1>
+        <p id="infoUsuario"></p>
+        <a href="index.html">Inicio</a>
+    </header>
+
+    <main>
+        <section>
+            <h2>Registrar obra (Firma digital ECDSA)</h2>
+            <form id="obraForm">
+                <div>
+                    <label for="titulo">Título de la obra:</label><br>
+                    <input type="text" id="titulo" name="titulo" required>
+                </div>
+                <br>
+                <div>
+                    <label for="archivo">Imagen (png, jpg, jpeg, bmp, gif):</label><br>
+                    <input type="file" id="archivo" name="archivo" accept=".png,.jpg,.jpeg,.bmp,.gif" required>
+                </div>
+                <br>
+                <div>
+                    <button type="submit">Registrar y firmar obra</button>
+                </div>
+            </form>
+            <p id="mensajeError" style="color: red; display: none;"></p>
+            <pre id="resultadoFirma"></pre>
+        </section>
+
+        <section>
+            <h2>Mis obras registradas</h2>
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Archivo original</th>
+                        <th>Ruta obra cifrada</th>
+                        <th>Fecha de registro</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaObras"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <script>
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioActivo') || 'null');
+        if (!sesion || sesion.rol !== 'PINTOR') {
+            alert('Debe iniciar sesión como PINTOR.');
+            window.location.href = 'logIn.html';
+        }
+        document.getElementById('infoUsuario').textContent = 'Pintor: ' + sesion.nombre_usuario;
+
+        async function cargarObras() {
+            const tabla = document.getElementById('tablaObras');
+            tabla.innerHTML = '';
+            const respuesta = await fetch('/api/obras/pintor/' + sesion.id);
+            if (!respuesta.ok) return;
+            const obras = await respuesta.json();
+            for (const obra of obras) {
+                const fila = document.createElement('tr');
+                for (const valor of [obra.id, obra.titulo, obra.nombreArchivoOriginal, obra.rutaImagenCifrada, obra.fechaRegistro]) {
+                    const celda = document.createElement('td');
+                    celda.textContent = valor;
+                    fila.appendChild(celda);
+                }
+                tabla.appendChild(fila);
+            }
+        }
+
+        document.getElementById('obraForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const mensajeError = document.getElementById('mensajeError');
+            const resultado = document.getElementById('resultadoFirma');
+            mensajeError.style.display = 'none';
+            resultado.textContent = '';
+
+            const datos = new FormData();
+            datos.append('usuarioId', sesion.id);
+            datos.append('titulo', document.getElementById('titulo').value);
+            datos.append('archivo', document.getElementById('archivo').files[0]);
+
+            try {
+                const respuesta = await fetch('/api/obras', { method: 'POST', body: datos });
+                const r = await respuesta.json();
+
+                if (respuesta.ok) {
+                    resultado.textContent =
+                        'FIRMA DIGITAL ECDSA DE LA OBRA CIFRADA \n' +
+                        '--------------------------------------------------------------\n' +
+                        'ID de la obra:                  ' + r.obraId + '\n' +
+                        'Título:                         ' + r.titulo + '\n' +
+                        'Pintor firmante:                ' + r.pintor + '\n' +
+                        'Archivo de obra cifrada:        ' + r.rutaImagenCifrada + '\n' +
+                        'Tamaño de obra cifrada:         ' + r.tamanoBytes + ' bytes\n' +
+                        'Algoritmo de firma digital:     ' + r.algoritmo + '\n' +
+                        '--------------------------------------------------------------\n' +
+                        'HASH SHA-256 DE LA OBRA:\n' + r.hashSha256Hex + '\n' +
+                        '--------------------------------------------------------------\n' +
+                        'FIRMA DIGITAL (' + r.longitudFirmaBytes + ' bytes):\n' +
+                        '-> Hexadecimal: ' + r.firmaHex + '\n' +
+                        '-> Base64:      ' + r.firmaBase64 + '\n' +
+                        '--------------------------------------------------------------\n' +
+                        'Verificación con llave pública (BD): ' + (r.verificadaConLlavePublicaBD ? 'VÁLIDA [OK]' : 'NO VERIFICADA') + '\n' +
+                        'Firma guardada en la tabla OBRAS (firma_ecdsa_pintor).';
+                    document.getElementById('obraForm').reset();
+                    cargarObras();
+                } else {
+                    mensajeError.textContent = r.mensaje || 'Error al registrar la obra';
+                    mensajeError.style.display = 'block';
+                }
+            } catch (error) {
+                mensajeError.textContent = 'No se pudo conectar con el servidor.';
+                mensajeError.style.display = 'block';
+            }
+        });
+
+        cargarObras();
+    </script>
+</body>
+
+</html>

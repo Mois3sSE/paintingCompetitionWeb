@@ -251,6 +251,21 @@ public class ModuloRegistroECDSA implements RegistroECDSAPort {
         return kf.generatePrivate(new PKCS8EncodedKeySpec(bytes));
     }
 
+    /**
+     * Reconstruye la llave pública EC a partir del Base64 (formato X.509)
+     * almacenado en la columna LLAVES_EC.llave_publica de la base de datos.
+     *
+     * @param llavePublicaB64 Llave pública en Base64.
+     * @return Llave pública EC lista para verificar firmas.
+     */
+    @Override
+    public PublicKey llavePublicaDesdeBase64(String llavePublicaB64) throws Exception {
+        Objects.requireNonNull(llavePublicaB64, "La llave pública en Base64 no puede ser nula.");
+        byte[] bytes = Base64.getDecoder().decode(llavePublicaB64.trim());
+        KeyFactory kf = KeyFactory.getInstance("EC", PROVEEDOR_BC);
+        return kf.generatePublic(new X509EncodedKeySpec(bytes));
+    }
+
     // =========================================================
     // PERSISTENCIA Y CARGA DE FIRMAS DIGITALES ECDSA (INTEGRANTE 2)
     // =========================================================

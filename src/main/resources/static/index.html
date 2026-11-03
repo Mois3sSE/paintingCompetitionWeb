@@ -65,7 +65,14 @@
                 </div>
             `;
 
+            // Panel según el rol (Firma ECDSA del pintor / verificación del juez)
+            const paneles = { PINTOR: 'pintor.html', JUEZ: 'juez.html' };
+            const enlacePanel = paneles[usuario.rol]
+                ? `<a href="${paneles[usuario.rol]}" style="margin-right: 15px;">mi panel</a>`
+                : '';
+
             accionSesion.innerHTML = `
+                ${enlacePanel}
                 <a href="index.html" id="btnCerrarSesion" style="margin-right: 15px;">cerrar sesion</a>
                 <a href="logIn.html">iniciar sesion</a>
             `;
