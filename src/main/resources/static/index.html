@@ -68,7 +68,11 @@
                 </div>
             `;
 
+            // Integrante 2: panel del juez (verificación de la firma ECDSA)
+            const enlacePanel = usuario.rol === 'JUEZ' ? `<a href="juez.html" style="margin-right: 15px;">panel juez</a>` : '';
+
             accionSesion.innerHTML = `
+                ${enlacePanel}
                 <a href="index.html" id="btnCerrarSesion" style="margin-right: 15px;">cerrar sesion</a>
                 <a href="logIn.html">iniciar sesion</a>
             `;

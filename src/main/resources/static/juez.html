@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painting Competition - Panel del Juez</title>
+</head>
+
+<body>
+    <header>
+        <h1>Panel del Juez</h1>
+        <p id="infoUsuario"></p>
+        <a href="index.html">inicio</a>
+    </header>
+
+    <main>
+        <section>
+            <h2>Obras registradas</h2>
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Autor</th>
+                        <th>Archivo original</th>
+                        <th>Fecha de registro</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaObras"></tbody>
+            </table>
+            <p id="mensajeError" style="color: red;"></p>
+        </section>
+
+        <section>
+            <h2>Verificación de la firma ECDSA (Integrante 2)</h2>
+            <h3 id="resultadoTitulo"></h3>
+            <pre id="resultadoVerificacion"></pre>
+        </section>
+    </main>
+
+    <script>
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioActivo') || 'null');
+        if (!sesion || sesion.rol !== 'JUEZ') {
+            alert('Debe iniciar sesión como JUEZ.');
+            window.location.href = 'logIn.html';
+        }
+        document.getElementById('infoUsuario').textContent = 'Juez: ' + sesion.nombre_usuario;
+
+        async function cargarObras() {
+            const respuesta = await fetch('/api/obras/juez/' + sesion.id);
+            const obras = await respuesta.json();
+            if (!respuesta.ok) {
+                document.getElementById('mensajeError').textContent = obras.mensaje;
+                return;
+            }
+            const tabla = document.getElementById('tablaObras');
+            tabla.innerHTML = '';
+            for (const obra of obras) {
+                const fila = document.createElement('tr');
+                for (const valor of [obra.id, obra.titulo, obra.autor, obra.archivo, obra.fecha]) {
+                    const celda = document.createElement('td');
+                    celda.textContent = valor;
+                    fila.appendChild(celda);
+                }
+                const boton = document.createElement('button');
+                boton.textContent = 'Verificar firma';
+                boton.addEventListener('click', () => verificarFirma(obra.id));
+                const celdaAccion = document.createElement('td');
+                celdaAccion.appendChild(boton);
+                fila.appendChild(celdaAccion);
+                tabla.appendChild(fila);
+            }
+        }
+
+        async function verificarFirma(obraId) {
+            const titulo = document.getElementById('resultadoTitulo');
+            const respuesta = await fetch('/api/obras/' + obraId + '/verificar-firma?usuarioId=' + sesion.id);
+            const r = await respuesta.json();
+            if (!respuesta.ok) {
+                titulo.textContent = r.mensaje;
+                titulo.style.color = 'red';
+                return;
+            }
+            titulo.textContent = 'RESULTADO: ' + r.resultado;
+            titulo.style.color = r.valida ? 'green' : 'red';
+            document.getElementById('resultadoVerificacion').textContent =
+                'Obra:                     ' + r.titulo + ' (ID ' + obraId + ')\n' +
+                'Pintor:                   ' + r.autor + '\n' +
+                'Archivo cifrado:          ' + r.ruta + '\n' +
+                'Algoritmo:                ' + r.algoritmo + '\n' +
+                'Hash SHA-256:             ' + r.hashSha256 + '\n' +
+                'Firma del pintor (BD):    ' + r.firma + '\n' +
+                'Llave pública (BD):       ' + r.llavePublica + '\n' +
+                '>> ' + r.mensaje + '\n' +
+                'Prueba de integridad (1 byte alterado): ' + (r.alteracionDetectada ? 'alteración DETECTADA [OK]' : '-');
+        }
+
+        cargarObras();
+    </script>
+</body>
+
+</html>
