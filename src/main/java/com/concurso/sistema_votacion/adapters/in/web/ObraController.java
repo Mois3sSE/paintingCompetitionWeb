@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
 
 /**
- * Integrante 2 - Registro, Identidad y No Repudio (ECDSA).
+ * Registro, Identidad y No Repudio (ECDSA).
  * El juez consulta las obras y verifica la firma ECDSA del pintor
  * (tabla OBRAS) con la llave pública del pintor (tabla LLAVES_EC).
  */
