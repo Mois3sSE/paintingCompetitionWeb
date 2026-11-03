@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subir Obra - Painting Competition</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; padding: 40px; display: flex; justify-content: center; }
+        .card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { margin-top: 0; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #555; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #004085; }
+        
+        /* Estilo para los mensajes de notificación (limpio y amigable) */
+        #mensajeAlerta {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .alerta-exito {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alerta-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Upload and Encrypt Artwork</h2>
+    <p style="color: #666; font-size: 14px;">Módulo de Confidencialidad AES-GCM & ECDH (Integrante 1)</p>
+    
+    <form id="obraForm">
+        <div class="form-group">
+            <label for="nombrePintor">Painter Username:</label>
+            <input type="text" id="nombrePintor" required readonly style="background-color: #e9ecef;">
+        </div>
+
+        <div class="form-group">
+            <label for="tituloObra">Artwork Title:</label>
+            <input type="text" id="tituloObra" placeholder="Inserta el nombre de tu obra" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="archivoImagen">Select Digital Painting:</label>
+            <input type="file" id="archivoImagen" accept="image/*" required>
+        </div>
+        
+        <button type="submit" id="btnProcesar">Encrypt & Submit Artwork</button>
+    </form>
+
+    <!-- Alerta amigable en lugar de la terminal negra -->
+    <div id="mensajeAlerta"></div>
+</div>
+
+<script>
+    // Recuperar el usuario activo de sessionStorage al cargar la página
+    const sesionPintor = sessionStorage.getItem('usuarioActivo');
+    if (sesionPintor) {
+        const datosUsr = JSON.parse(sesionPintor);
+        document.getElementById('nombrePintor').value = datosUsr.nombre_usuario;
+    }
+
+    document.getElementById('obraForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById('btnProcesar');
+        const alerta = document.getElementById('mensajeAlerta');
+        
+        btn.disabled = true;
+        btn.textContent = "Procesando cifrado...";
+        
+        // Ocultar alerta anterior y mostrar estado de carga sutil
+        alerta.style.display = "none";
+        alerta.className = "";
+
+        const formData = new FormData();
+        formData.append('pintor', document.getElementById('nombrePintor').value.trim());
+        formData.append('titulo', document.getElementById('tituloObra').value.trim());
+        formData.append('imagen', document.getElementById('archivoImagen').files[0]);
+
+        try {
+            const response = await fetch('/api/obras/cifrar-integrante1', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Mensaje de éxito limpio y amigable
+                alerta.className = "alerta-exito";
+                alerta.style.display = "block";
+                alerta.innerHTML = `<strong>¡Todo chido! 🎉</strong><br>
+                    Tu obra ha sido cifrada exitosamente y registrada en el sistema.<br>
+                    <small>Archivo guardado: <em>${result.archivoGenerado}</em></small>`;
+                
+                // Limpiar formulario opcionalmente
+                document.getElementById('obraForm').reset();
+                document.getElementById('nombrePintor').value = JSON.parse(sesionPintor).nombre_usuario; // Mantener el nombre
+            } else {
+                throw new Error(result.error || "Error desconocido en el servidor");
+            }
+        } catch (error) {
+            // Mensaje de error limpio
+            alerta.className = "alerta-error";
+            alerta.style.display = "block";
+            alerta.innerHTML = `<strong>¡Ups! Ocurrió un problema:</strong><br>${error.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Encrypt & Submit Artwork";
+        }
+    });
+</script>
+
+</body>
+</html>
