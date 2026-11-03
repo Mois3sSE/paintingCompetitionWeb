@@ -7,7 +7,7 @@ import java.security.PublicKey;
 
 /**
  * Puerto especializado para las operaciones de autenticidad ECDSA.
- * Integrante 2 - Modulo de Registro.
+ * Modulo de Registro.
  *
  * Permite utilizar el modulo ECDSA sin depender
  * directamente de su adaptador de infraestructura.

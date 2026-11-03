@@ -27,7 +27,6 @@ import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
 
 /**
  * Adaptador de Salida para Autenticidad, Registro y No Repudio.
- * Asignado a: INTEGRANTE 2.
  *
  * Responsabilidad:
  * - Generar pares de llaves ECDSA.
@@ -75,7 +74,7 @@ public class ModuloRegistroECDSA implements RegistroECDSAPort {
     }
 
     // =========================================================
-    // METODOS ESPECIFICOS - INTEGRANTE 2
+    // METODOS ESPECIFICOS
     // =========================================================
 
     /**
@@ -200,7 +199,7 @@ public class ModuloRegistroECDSA implements RegistroECDSAPort {
     }
 
     // =========================================================
-    // PERSISTENCIA Y CARGA DE LLAVES EC (INTEGRANTE 2)
+    // PERSISTENCIA Y CARGA DE LLAVES EC
     // =========================================================
 
     @Override
@@ -252,7 +251,7 @@ public class ModuloRegistroECDSA implements RegistroECDSAPort {
     }
 
     // =========================================================
-    // PERSISTENCIA Y CARGA DE FIRMAS DIGITALES ECDSA (INTEGRANTE 2)
+    // PERSISTENCIA Y CARGA DE FIRMAS DIGITALES ECDSA
     // =========================================================
 
     @Override

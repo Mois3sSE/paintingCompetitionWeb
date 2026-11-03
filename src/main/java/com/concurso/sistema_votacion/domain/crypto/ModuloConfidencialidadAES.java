@@ -31,7 +31,7 @@ import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
 @Service
 public class ModuloConfidencialidadAES {
 
-    // Integrante 2: firma ECDSA de la obra cifrada
+    // Firma ECDSA de la obra cifrada
     private final RegistroECDSAPort registroECDSAPort;
 
     public ModuloConfidencialidadAES(RegistroECDSAPort registroECDSAPort) {
@@ -103,7 +103,7 @@ public class ModuloConfidencialidadAES {
         System.out.println("Archivo cifrado exportado:   " + nombreArchivoSalida + " (total: " + (iv.length + payloadCifrado.length) + " bytes)");
         System.out.println("Verificación de Integridad:  VÁLIDA [OK]");
 
-        // Integrante 2: el pintor firma la obra cifrada (IV + cifrado) con su llave privada (SHA256withECDSA)
+        // El pintor firma la obra cifrada (IV + cifrado) con su llave privada (SHA256withECDSA)
         byte[] obraCifrada = Files.readAllBytes(new File(nombreArchivoSalida).toPath());
         String firmaECDSA = Base64.getEncoder().encodeToString(registroECDSAPort.firmarECDSA(obraCifrada, privPintor));
         System.out.println("Firma ECDSA del pintor:      " + firmaECDSA);
@@ -131,7 +131,7 @@ public class ModuloConfidencialidadAES {
                 pstmtInsert.setInt(2, autorId);
                 pstmtInsert.setString(3, nombreImagenOriginal);
                 pstmtInsert.setString(4, nombreArchivoSalida);
-                pstmtInsert.setString(5, firmaECDSA); // Firma ECDSA del pintor (Integrante 2)
+                pstmtInsert.setString(5, firmaECDSA); // Firma ECDSA del pintor
                 pstmtInsert.setString(6, LocalDateTime.now().toString());
                 pstmtInsert.executeUpdate();
             }
