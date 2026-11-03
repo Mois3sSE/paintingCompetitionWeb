@@ -47,6 +47,9 @@
                     the decryption key through our platform.</li>
             </ul>
             </p>
+
+            <div id="contenedorSubida"></div>
+
         </section>
     </main>
 
@@ -75,6 +78,29 @@
                 sessionStorage.removeItem('usuarioActivo');
                 window.location.href = 'index.html';
             });
+
+            // Si es PINTOR, cargamos automáticamente el archivo subir_obra.html en la página principal
+            if (usuario.rol && usuario.rol.toUpperCase() === 'PINTOR') {
+                fetch('subir_obra.html')
+                    .then(response => response.text())
+                    .then(html => {
+                        // Extraemos solo el cuerpo/contenido interno del archivo para inyectarlo
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        // Buscamos el contenedor o el form principal del archivo externo
+                        const contenidoModulo = doc.querySelector('div') || doc.body;
+                        document.getElementById('contenedorSubida').innerHTML = contenidoModulo.innerHTML;
+
+                        // Ejecutamos manualmente los scripts que venían dentro del HTML inyectado
+                        const scripts = doc.querySelectorAll('script');
+                        scripts.forEach(script => {
+                            const nuevoScript = document.createElement('script');
+                            nuevoScript.text = script.text;
+                            document.body.appendChild(nuevoScript);
+                        });
+                    })
+                    .catch(err => console.error("Error al cargar el módulo de subida:", err));
+            }
         }
     </script>
 </body>
