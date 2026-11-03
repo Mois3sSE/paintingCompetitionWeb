@@ -4,7 +4,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
@@ -40,16 +39,5 @@ public class SqliteLlavesECRepository implements LlavesECRepositoryPort {
             ps.executeUpdate();
         }
     }
-
-    @Override
-    public Optional<String> obtenerLlavePublicaPorUsuario(int usuarioId) throws Exception {
-        try (Connection conn = DriverManager.getConnection(dbUrl);
-                PreparedStatement ps = conn.prepareStatement(
-                        "SELECT llave_publica FROM LLAVES_EC WHERE usuario_id = ?")) {
-            ps.setInt(1, usuarioId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? Optional.of(rs.getString("llave_publica")) : Optional.empty();
-            }
-        }
-    }
 }
+

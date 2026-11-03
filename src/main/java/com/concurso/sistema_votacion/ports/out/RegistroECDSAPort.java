@@ -35,9 +35,6 @@ public interface RegistroECDSAPort extends MotorCriptograficoPort {
 
     PrivateKey cargarLlavePrivada(Path rutaArchivo) throws Exception;
 
-    // Reconstruye la llave pública EC guardada en Base64 (X.509) en la tabla LLAVES_EC
-    PublicKey llavePublicaDesdeBase64(String llavePublicaB64) throws Exception;
-
     // Persistencia y carga de firmas digitales ECDSA
     void guardarFirmaDigital(byte[] firma, Path rutaArchivo) throws Exception;
 

@@ -1,112 +1,153 @@
 package com.concurso.sistema_votacion.adapters.in.web;
 
-import java.util.Locale;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
+import java.security.MessageDigest;
+import java.security.PublicKey;
+import java.security.spec.X509EncodedKeySpec;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
-import com.concurso.sistema_votacion.ports.in.RegistroObraPintorUseCase;
-import com.concurso.sistema_votacion.ports.in.VerificacionFirmaObraUseCase;
+import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
 
 /**
- * Adaptador de entrada web para el registro de obras con firma ECDSA (Pintor)
- * y la verificación de autenticidad de obras (Juez).
- * Integrante 2 - Registro, Identidad y No Repudio.
+ * Integrante 2 - Registro, Identidad y No Repudio (ECDSA).
+ * El juez consulta las obras y verifica la firma ECDSA del pintor
+ * (tabla OBRAS) con la llave pública del pintor (tabla LLAVES_EC).
  */
 @RestController
 @RequestMapping("/api/obras")
 public class ObraController {
 
-	private static final Set<String> EXTENSIONES_PERMITIDAS = Set.of(".png", ".jpg", ".jpeg", ".bmp", ".gif");
+	@Value("${spring.datasource.url:jdbc:sqlite:db/votacion.db}")
+	private String dbUrl;
 
-	private final RegistroObraPintorUseCase registroObraPintorUseCase;
-	private final VerificacionFirmaObraUseCase verificacionFirmaObraUseCase;
+	private final RegistroECDSAPort registroECDSAPort;
 
-	public ObraController(
-			RegistroObraPintorUseCase registroObraPintorUseCase,
-			VerificacionFirmaObraUseCase verificacionFirmaObraUseCase) {
-		this.registroObraPintorUseCase = registroObraPintorUseCase;
-		this.verificacionFirmaObraUseCase = verificacionFirmaObraUseCase;
-	}
-
-	// PINTOR: registrar obra y firmarla con ECDSA
-	@PostMapping
-	public ResponseEntity<?> registrarObra(
-			@RequestParam("usuarioId") int usuarioId,
-			@RequestParam("titulo") String titulo,
-			@RequestParam("archivo") MultipartFile archivo) {
-
-		if (archivo == null || archivo.isEmpty()) {
-			return ResponseEntity.badRequest().body(Map.of("mensaje", "Debe seleccionar una imagen."));
-		}
-
-		String nombreOriginal = archivo.getOriginalFilename() != null ? archivo.getOriginalFilename() : "obra";
-		int puntoIdx = nombreOriginal.lastIndexOf('.');
-		String extension = (puntoIdx > 0) ? nombreOriginal.substring(puntoIdx).toLowerCase(Locale.ROOT) : "";
-		if (!EXTENSIONES_PERMITIDAS.contains(extension)) {
-			return ResponseEntity.badRequest()
-					.body(Map.of("mensaje", "Formato no permitido. Use: " + EXTENSIONES_PERMITIDAS));
-		}
-
-		try {
-			// TODO Integrante 1: aquí se cifra la imagen con AES-256-GCM (llave derivada por ECDH)
-			// antes de firmarla. Mientras tanto se firman los bytes recibidos tal cual.
-			byte[] obraCifrada = archivo.getBytes();
-
-			return ResponseEntity.status(HttpStatus.CREATED).body(
-					registroObraPintorUseCase.registrarObraFirmada(usuarioId, titulo, nombreOriginal, obraCifrada));
-		} catch (Exception e) {
-			return manejarError(e);
-		}
-	}
-
-	// PINTOR: consultar mis obras registradas
-	@GetMapping("/pintor/{usuarioId}")
-	public ResponseEntity<?> listarObrasDelPintor(@PathVariable int usuarioId) {
-		try {
-			return ResponseEntity.ok(registroObraPintorUseCase.listarObrasDelPintor(usuarioId));
-		} catch (Exception e) {
-			return manejarError(e);
-		}
+	public ObraController(RegistroECDSAPort registroECDSAPort) {
+		this.registroECDSAPort = registroECDSAPort;
 	}
 
 	// JUEZ: catálogo de obras registradas
 	@GetMapping("/juez/{usuarioId}")
-	public ResponseEntity<?> listarObrasParaJuez(@PathVariable int usuarioId) {
-		try {
-			return ResponseEntity.ok(verificacionFirmaObraUseCase.listarObrasParaJuez(usuarioId));
+	public ResponseEntity<?> listarObras(@PathVariable int usuarioId) {
+		try (Connection conn = DriverManager.getConnection(dbUrl)) {
+			if (!esJuez(conn, usuarioId)) {
+				return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("mensaje", "Solo un JUEZ puede ver las obras."));
+			}
+			List<Map<String, Object>> obras = new ArrayList<>();
+			try (PreparedStatement ps = conn.prepareStatement(
+					"SELECT o.id, o.titulo, u.nombre_usuario, o.nombre_archivo_original, o.fecha_registro " +
+					"FROM OBRAS o JOIN USUARIOS u ON u.id = o.autor_id ORDER BY o.id");
+					ResultSet rs = ps.executeQuery()) {
+				while (rs.next()) {
+					obras.add(Map.of(
+							"id", rs.getInt("id"),
+							"titulo", rs.getString("titulo"),
+							"autor", rs.getString("nombre_usuario"),
+							"archivo", rs.getString("nombre_archivo_original"),
+							"fecha", rs.getString("fecha_registro")));
+				}
+			}
+			return ResponseEntity.ok(obras);
 		} catch (Exception e) {
-			return manejarError(e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
 		}
 	}
 
-	// JUEZ: análisis de autenticidad e integridad de la obra (ECDSA)
+	// JUEZ: verificar la firma ECDSA de la obra -> VALIDA / INVALIDA
 	@GetMapping("/{obraId}/verificar-firma")
 	public ResponseEntity<?> verificarFirma(@PathVariable int obraId, @RequestParam("usuarioId") int usuarioId) {
-		try {
-			return ResponseEntity.ok(verificacionFirmaObraUseCase.verificarFirmaObra(usuarioId, obraId));
+		try (Connection conn = DriverManager.getConnection(dbUrl)) {
+			if (!esJuez(conn, usuarioId)) {
+				return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("mensaje", "Solo un JUEZ puede verificar obras."));
+			}
+			Map<String, String> obra = leerObra(conn, obraId);
+			if (obra == null) {
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "La obra no existe."));
+			}
+
+			byte[] datosObra = Files.readAllBytes(Paths.get(obra.get("ruta")));
+			boolean valida = firmaValida(obra, datosObra);
+
+			// Prueba de integridad: si se altera 1 byte, la firma ya no coincide
+			byte[] obraAlterada = datosObra.clone();
+			obraAlterada[obraAlterada.length - 1] ^= 0x01;
+			boolean alteracionDetectada = !firmaValida(obra, obraAlterada);
+
+			Map<String, Object> resultado = new HashMap<>(obra);
+			resultado.put("algoritmo", "SHA256withECDSA (Curva secp256r1)");
+			resultado.put("hashSha256", HexFormat.of().withUpperCase().formatHex(MessageDigest.getInstance("SHA-256").digest(datosObra)));
+			resultado.put("valida", valida);
+			resultado.put("resultado", valida ? "VALIDA" : "INVALIDA");
+			resultado.put("alteracionDetectada", alteracionDetectada);
+			resultado.put("mensaje", valida
+					? "La obra es auténtica y no sufrió ninguna modificación."
+					: "[ALERTA] La firma no coincide o la obra fue alterada. No se descifrará la imagen.");
+			return ResponseEntity.ok(resultado);
 		} catch (Exception e) {
-			return manejarError(e);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
 		}
 	}
 
-	private ResponseEntity<?> manejarError(Exception e) {
-		if (e instanceof SecurityException) {
-			return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("mensaje", e.getMessage()));
+	// Lee de la BD la obra (OBRAS), su autor y la llave pública del autor (LLAVES_EC)
+	private Map<String, String> leerObra(Connection conn, int obraId) throws Exception {
+		try (PreparedStatement ps = conn.prepareStatement(
+				"SELECT o.titulo, u.nombre_usuario, o.nombre_archivo_original, o.ruta_imagen_cifrada, o.firma_ecdsa_pintor, k.llave_publica " +
+				"FROM OBRAS o JOIN USUARIOS u ON u.id = o.autor_id LEFT JOIN LLAVES_EC k ON k.usuario_id = o.autor_id WHERE o.id = ?")) {
+			ps.setInt(1, obraId);
+			try (ResultSet rs = ps.executeQuery()) {
+				if (!rs.next()) {
+					return null;
+				}
+				Map<String, String> obra = new HashMap<>();
+				obra.put("titulo", rs.getString("titulo"));
+				obra.put("autor", rs.getString("nombre_usuario"));
+				obra.put("archivo", rs.getString("nombre_archivo_original"));
+				obra.put("ruta", rs.getString("ruta_imagen_cifrada"));
+				obra.put("firma", rs.getString("firma_ecdsa_pintor"));
+				obra.put("llavePublica", rs.getString("llave_publica"));
+				return obra;
+			}
 		}
-		if (e instanceof IllegalArgumentException || e instanceof IllegalStateException) {
-			return ResponseEntity.badRequest().body(Map.of("mensaje", e.getMessage()));
+	}
+
+	// Verifica la firma (Base64) con la llave pública del pintor (Base64 X.509)
+	private boolean firmaValida(Map<String, String> obra, byte[] datosObra) {
+		try {
+			byte[] firma = Base64.getDecoder().decode(obra.get("firma"));
+			byte[] llave = Base64.getDecoder().decode(obra.get("llavePublica"));
+			PublicKey pubPintor = KeyFactory.getInstance("EC").generatePublic(new X509EncodedKeySpec(llave));
+			return registroECDSAPort.verificarFirmaECDSA(datosObra, firma, pubPintor);
+		} catch (Exception e) {
+			return false;
 		}
-		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-				.body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
+	}
+
+	private boolean esJuez(Connection conn, int usuarioId) throws Exception {
+		try (PreparedStatement ps = conn.prepareStatement("SELECT rol FROM USUARIOS WHERE id = ?")) {
+			ps.setInt(1, usuarioId);
+			try (ResultSet rs = ps.executeQuery()) {
+				return rs.next() && "JUEZ".equalsIgnoreCase(rs.getString("rol"));
+			}
+		}
 	}
 }
