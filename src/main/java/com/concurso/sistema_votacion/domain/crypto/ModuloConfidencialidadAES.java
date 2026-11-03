@@ -26,8 +26,17 @@ import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.stereotype.Service;
 
+import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
+
 @Service
 public class ModuloConfidencialidadAES {
+
+    // Integrante 2: firma ECDSA de la obra cifrada
+    private final RegistroECDSAPort registroECDSAPort;
+
+    public ModuloConfidencialidadAES(RegistroECDSAPort registroECDSAPort) {
+        this.registroECDSAPort = registroECDSAPort;
+    }
 
     public Map<String, Object> procesarObraIntegrante1(String nombrePintor, String tituloObra, byte[] imagenBytes, String nombreImagenOriginal) throws Exception {
         Map<String, Object> logConsola = new HashMap<>();
@@ -37,7 +46,8 @@ public class ModuloConfidencialidadAES {
         System.out.println("Pintor autenticado:   " + nombrePintor);
 
         // 1. Cargar llaves desde los directorios locales
-        String rutaPrivPintor = "claves_usuarios/Pintores/" + nombrePintor + "/" + nombrePintor + "_priv.pem";
+        String carpetaPintor = nombrePintor.trim().replaceAll("\s+", "_");
+        String rutaPrivPintor = "claves_usuarios/Pintores/" + carpetaPintor + "/" + carpetaPintor + "_priv.pem";
         String rutaPubSistema = "clave_sistema/pub_sist.pem";
         
         PrivateKey privPintor = cargarLlavePrivadaEC(rutaPrivPintor);
@@ -74,7 +84,7 @@ public class ModuloConfidencialidadAES {
         byte[] payloadCifrado = cipher.doFinal(imagenBytes);
 
         // 5. Concatenar IV + Payload Cifrado y guardar en archivo físico
-        String nombreArchivoSalida = "imagenes/imagen_Cifrado_" + nombrePintor + ".png";
+        String nombreArchivoSalida = "imagenes/imagen_Cifrado_" + carpetaPintor + "_" + System.currentTimeMillis() + ".png";
         File dirImagenes = new File("imagenes");
         if(!dirImagenes.exists()) dirImagenes.mkdirs();
         
@@ -92,6 +102,11 @@ public class ModuloConfidencialidadAES {
         System.out.println("Tamaño de payload cifrado:   " + payloadCifrado.length + " bytes");
         System.out.println("Archivo cifrado exportado:   " + nombreArchivoSalida + " (total: " + (iv.length + payloadCifrado.length) + " bytes)");
         System.out.println("Verificación de Integridad:  VÁLIDA [OK]");
+
+        // Integrante 2: el pintor firma la obra cifrada (IV + cifrado) con su llave privada (SHA256withECDSA)
+        byte[] obraCifrada = Files.readAllBytes(new File(nombreArchivoSalida).toPath());
+        String firmaECDSA = Base64.getEncoder().encodeToString(registroECDSAPort.firmarECDSA(obraCifrada, privPintor));
+        System.out.println("Firma ECDSA del pintor:      " + firmaECDSA);
 
         // 6. Registrar en la base de datos SQLite (Tabla OBRAS)
        String urlDb = "jdbc:sqlite:db/votacion.db";
@@ -116,7 +131,7 @@ public class ModuloConfidencialidadAES {
                 pstmtInsert.setInt(2, autorId);
                 pstmtInsert.setString(3, nombreImagenOriginal);
                 pstmtInsert.setString(4, nombreArchivoSalida);
-                pstmtInsert.setString(5, "PENDIENTE_INTEGRANTE_2"); // Valor temporal mientras el Integrante 2 hace su parte
+                pstmtInsert.setString(5, firmaECDSA); // Firma ECDSA del pintor (Integrante 2)
                 pstmtInsert.setString(6, LocalDateTime.now().toString());
                 pstmtInsert.executeUpdate();
             }
@@ -125,7 +140,25 @@ public class ModuloConfidencialidadAES {
 
         logConsola.put("mensaje", "Proceso del Integrante 1 completado y registrado en la BD");
         logConsola.put("archivoGenerado", nombreArchivoSalida);
+        logConsola.put("firmaECDSA", firmaECDSA);
         return logConsola;
+    }
+
+    // Descifrado para el juez: d_sistema * Q_pintor = d_pintor * Q_sistema (mismo secreto ECDH -> misma llave AES)
+    public byte[] descifrarObra(byte[] obraCifrada, String llavePublicaPintorB64) throws Exception {
+        PrivateKey privSistema = cargarLlavePrivadaEC("clave_sistema/priv_sist.pem");
+        PublicKey pubPintor = KeyFactory.getInstance("EC")
+                .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(llavePublicaPintorB64)));
+
+        KeyAgreement keyAgreement = KeyAgreement.getInstance("ECDH");
+        keyAgreement.init(privSistema);
+        keyAgreement.doPhase(pubPintor, true);
+        SecretKeySpec aesKey = new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(keyAgreement.generateSecret()), "AES");
+
+        // Los primeros 12 bytes son el IV; el resto es el cifrado + tag de 128 bits
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, aesKey, new GCMParameterSpec(128, obraCifrada, 0, 12));
+        return cipher.doFinal(obraCifrada, 12, obraCifrada.length - 12);
     }
 
     private PrivateKey cargarLlavePrivadaEC(String path) throws Exception {

@@ -47,33 +47,10 @@
                     <tr>
                         <th>Nombre Obra</th>
                         <th>Juez encargado</th>
+                        <th>Estado</th>
                     </tr>
                 </thead>
                 <tbody id="tablaObrasJueces">
-                    <tr>
-                        <td>Sol amanecer</td>
-                        <td>Juez 1</td>
-                    </tr>
-
-                    <tr>
-                        <td>Sol amanecer</td>
-                        <td>Juez 2</td>
-                    </tr>
-
-                    <tr>
-                        <td>Sol amanecer</td>
-                        <td>Juez 3</td>
-                    </tr>
-
-                    <tr>
-                        <td>Noche Obscura</td>
-                        <td>Juez 1</td>
-                    </tr>
-
-                    <tr>
-                        <td>Noche Obscura</td>
-                        <td>Juez 2</td>
-                    </tr>
                 </tbody>
             </table>
 
@@ -81,6 +58,12 @@
                 <button type="button" id="btnFirmar">Firmar</button>
             </div>
             <p id="mensajeFirma" style="font-weight: bold;"></p>
+        </section>
+
+        <section>
+            <h2>Resultados del concurso</h2>
+            <button type="button" id="btnResultados">Calcular resultados</button>
+            <pre id="resultados"></pre>
         </section>
     </main>
 
@@ -161,9 +144,53 @@
             actualizarVisibilidadBotonFirmar();
         });
 
-        btnFirmar.addEventListener('click', function () {
+        // Votos cegados de los jueces (el presidente no ve las estrellas)
+        async function cargarVotos() {
+            const votos = await (await fetch('/api/chaum/votos-cegados')).json();
+            tablaObrasJueces.innerHTML = '';
+            for (const voto of votos) {
+                const fila = document.createElement('tr');
+                fila.dataset.acta = voto.actaId;
+                for (const valor of [voto.obra, voto.juez, voto.estado]) {
+                    const celda = document.createElement('td');
+                    celda.textContent = valor;
+                    fila.appendChild(celda);
+                }
+                tablaObrasJueces.appendChild(fila);
+            }
+        }
+
+        btnFirmar.addEventListener('click', async function () {
+            if (inputLlavePrivada.files.length === 0) {
+                mensajeFirma.textContent = 'Primero cargue la llave privada.';
+                return;
+            }
             mensajeFirma.textContent = 'APLICANDO FIRMA';
+            const datos = new FormData();
+            datos.append('usuarioId', JSON.parse(sesionGuardada).id);
+            datos.append('llavePrivada', inputLlavePrivada.files[0]);
+            for (const fila of tablaObrasJueces.getElementsByClassName('seleccionada')) {
+                datos.append('actas', fila.dataset.acta);
+            }
+            const respuesta = await fetch('/api/chaum/firmar', { method: 'POST', body: datos });
+            mensajeFirma.textContent = (await respuesta.json()).mensaje;
+            await cargarVotos();
+            actualizarVisibilidadBotonFirmar();
         });
+
+        document.getElementById('btnResultados').addEventListener('click', async function () {
+            const r = await (await fetch('/api/chaum/resultados')).json();
+            let texto = 'LUGAR | OBRA | PROMEDIO | VOTOS VERIFICADOS\n';
+            for (const obra of r.ranking) {
+                texto += obra.lugar + ' | ' + obra.titulo + ' | ' + obra.promedio.toFixed(2) + ' | ' + obra.votos + '\n';
+            }
+            for (const obra of r.vulnerados) {
+                texto += '[ALERTA] VOTO VULNERADO en la obra: ' + obra.titulo + '\n';
+            }
+            document.getElementById('resultados').textContent = texto;
+        });
+
+        cargarVotos();
 
         document.addEventListener('click', function (e) {
             const clicEnCheckbox = chkSeleccionarTodo.parentElement.contains(e.target);

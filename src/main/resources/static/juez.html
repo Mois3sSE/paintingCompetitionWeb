@@ -38,6 +38,38 @@
             <h3 id="resultadoTitulo"></h3>
             <pre id="resultadoVerificacion"></pre>
         </section>
+
+        <section id="seccionEvaluar" style="display: none;">
+            <h2>Imagen descifrada (Integrante 1) y voto cegado (Integrante 3)</h2>
+            <img id="imagenObra" alt="Obra descifrada" style="max-width: 400px;"><br><br>
+            <label for="estrellas">Estrellas:</label>
+            <select id="estrellas">
+                <option value="1">1 - no es suficientemente buena</option>
+                <option value="2">2 - buena</option>
+                <option value="3">3 - sobresaliente</option>
+            </select><br>
+            <label for="comentario">Comentario:</label><br>
+            <textarea id="comentario" rows="3" cols="50"></textarea><br>
+            <button type="button" id="btnVotar">Enviar voto cegado al presidente</button>
+            <p id="mensajeVoto"></p>
+        </section>
+
+        <section>
+            <h2>Mis votos (firma a ciegas de Chaum)</h2>
+            <table border="1">
+                <thead>
+                    <tr>
+                        <th>Acta</th>
+                        <th>Obra</th>
+                        <th>Estrellas</th>
+                        <th>Estado</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaVotos"></tbody>
+            </table>
+            <p id="mensajeDescegar"></p>
+        </section>
     </main>
 
     <script>
@@ -74,8 +106,11 @@
             }
         }
 
+        let obraSeleccionada = null;
+
         async function verificarFirma(obraId) {
             const titulo = document.getElementById('resultadoTitulo');
+            document.getElementById('seccionEvaluar').style.display = 'none';
             const respuesta = await fetch('/api/obras/' + obraId + '/verificar-firma?usuarioId=' + sesion.id);
             const r = await respuesta.json();
             if (!respuesta.ok) {
@@ -95,9 +130,60 @@
                 'Llave pública (BD):       ' + r.llavePublica + '\n' +
                 '>> ' + r.mensaje + '\n' +
                 'Prueba de integridad (1 byte alterado): ' + (r.alteracionDetectada ? 'alteración DETECTADA [OK]' : '-');
+
+            // Solo si la firma es VALIDA se descifra la imagen y se puede votar
+            if (r.valida) {
+                obraSeleccionada = obraId;
+                document.getElementById('imagenObra').src = '/api/obras/' + obraId + '/imagen?usuarioId=' + sesion.id;
+                document.getElementById('mensajeVoto').textContent = '';
+                document.getElementById('seccionEvaluar').style.display = 'block';
+            }
+        }
+
+        document.getElementById('btnVotar').addEventListener('click', async function () {
+            const respuesta = await fetch('/api/chaum/votar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    usuarioId: String(sesion.id),
+                    obraId: String(obraSeleccionada),
+                    estrellas: document.getElementById('estrellas').value,
+                    comentario: document.getElementById('comentario').value
+                })
+            });
+            document.getElementById('mensajeVoto').textContent = (await respuesta.json()).mensaje;
+            cargarVotos();
+        });
+
+        async function cargarVotos() {
+            const votos = await (await fetch('/api/chaum/votos-juez/' + sesion.id)).json();
+            const tabla = document.getElementById('tablaVotos');
+            tabla.innerHTML = '';
+            for (const voto of votos) {
+                const fila = document.createElement('tr');
+                for (const valor of [voto.actaId, voto.obra, voto.estrellas, voto.estado]) {
+                    const celda = document.createElement('td');
+                    celda.textContent = valor;
+                    fila.appendChild(celda);
+                }
+                const celdaAccion = document.createElement('td');
+                if (voto.estado === 'FIRMADO') {
+                    const boton = document.createElement('button');
+                    boton.textContent = 'Descegar y verificar';
+                    boton.addEventListener('click', async () => {
+                        const respuesta = await fetch('/api/chaum/descegar/' + voto.actaId + '?usuarioId=' + sesion.id, { method: 'POST' });
+                        document.getElementById('mensajeDescegar').textContent = (await respuesta.json()).mensaje;
+                        cargarVotos();
+                    });
+                    celdaAccion.appendChild(boton);
+                }
+                fila.appendChild(celdaAccion);
+                tabla.appendChild(fila);
+            }
         }
 
         cargarObras();
+        cargarVotos();
     </script>
 </body>
 

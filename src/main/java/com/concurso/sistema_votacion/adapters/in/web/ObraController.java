@@ -19,6 +19,8 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.concurso.sistema_votacion.domain.crypto.ModuloConfidencialidadAES;
 import com.concurso.sistema_votacion.ports.out.RegistroECDSAPort;
 
 /**
@@ -41,9 +44,11 @@ public class ObraController {
 	private String dbUrl;
 
 	private final RegistroECDSAPort registroECDSAPort;
+	private final ModuloConfidencialidadAES moduloConfidencialidadAES;
 
-	public ObraController(RegistroECDSAPort registroECDSAPort) {
+	public ObraController(RegistroECDSAPort registroECDSAPort, ModuloConfidencialidadAES moduloConfidencialidadAES) {
 		this.registroECDSAPort = registroECDSAPort;
+		this.moduloConfidencialidadAES = moduloConfidencialidadAES;
 	}
 
 	// JUEZ: catálogo de obras registradas
@@ -85,6 +90,9 @@ public class ObraController {
 				return ResponseEntity.badRequest().body(Map.of("mensaje", "La obra no existe."));
 			}
 
+			if (!Files.exists(Paths.get(obra.get("ruta")))) {
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "No se encontró el archivo de la obra: " + obra.get("ruta")));
+			}
 			byte[] datosObra = Files.readAllBytes(Paths.get(obra.get("ruta")));
 			boolean valida = firmaValida(obra, datosObra);
 
@@ -103,6 +111,27 @@ public class ObraController {
 					? "La obra es auténtica y no sufrió ninguna modificación."
 					: "[ALERTA] La firma no coincide o la obra fue alterada. No se descifrará la imagen.");
 			return ResponseEntity.ok(resultado);
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
+		}
+	}
+
+	// JUEZ: ver la imagen. Solo se descifra (Integrante 1) si la firma ECDSA es VALIDA
+	@GetMapping("/{obraId}/imagen")
+	public ResponseEntity<?> verImagen(@PathVariable int obraId, @RequestParam("usuarioId") int usuarioId) {
+		try (Connection conn = DriverManager.getConnection(dbUrl)) {
+			Map<String, String> obra = leerObra(conn, obraId);
+			if (!esJuez(conn, usuarioId) || obra == null || !Files.exists(Paths.get(obra.get("ruta")))) {
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "Obra no disponible."));
+			}
+			byte[] datosObra = Files.readAllBytes(Paths.get(obra.get("ruta")));
+			if (!firmaValida(obra, datosObra)) {
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "Firma INVALIDA: no se descifra la imagen."));
+			}
+			byte[] imagen = moduloConfidencialidadAES.descifrarObra(datosObra, obra.get("llavePublica"));
+			return ResponseEntity.ok()
+					.contentType(MediaTypeFactory.getMediaType(obra.get("archivo")).orElse(MediaType.APPLICATION_OCTET_STREAM))
+					.body(imagen);
 		} catch (Exception e) {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("mensaje", "Error en el servidor: " + e.getMessage()));
 		}

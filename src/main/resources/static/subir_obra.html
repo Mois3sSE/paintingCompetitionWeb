@@ -104,7 +104,8 @@
                 alerta.style.display = "block";
                 alerta.innerHTML = `<strong>¡Todo chido! 🎉</strong><br>
                     Tu obra ha sido cifrada exitosamente y registrada en el sistema.<br>
-                    <small>Archivo guardado: <em>${result.archivoGenerado}</em></small>`;
+                    <small>Archivo guardado: <em>${result.archivoGenerado}</em></small><br>
+                    <small style="word-break: break-all;">Firma ECDSA del pintor (Integrante 2): <em>${result.firmaECDSA}</em></small>`;
                 
                 // Limpiar formulario opcionalmente
                 document.getElementById('obraForm').reset();
