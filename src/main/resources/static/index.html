@@ -11,7 +11,10 @@
     <header style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;">
         <div id="infoUsuario" style="display: flex; align-items: center; gap: 10px;"></div>
         <h1 style="margin: 0; text-align: center;">Painting Competition</h1>
-        <div id="accionSesion" style="text-align: right;"><a href="logIn.html">iniciar sesion</a></div>
+        <div style="text-align: right;">
+            <span id="accionUsuario"></span>
+            <span id="accionSesion"><a href="logIn.html">iniciar sesion</a></span>
+        </div>
     </header>
 
     <main>
@@ -59,6 +62,7 @@
             const usuario = JSON.parse(sesionGuardada);
             const infoUsuario = document.getElementById('infoUsuario');
             const accionSesion = document.getElementById('accionSesion');
+            const accionUsuario = document.getElementById('accionUsuario');
 
             infoUsuario.innerHTML = `
                 <img src="user.svg" alt="Usuario" width="40" height="40">
@@ -70,6 +74,12 @@
 
             // Integrante 2: panel del juez (verificación de la firma ECDSA)
             const enlacePanel = usuario.rol === 'JUEZ' ? `<a href="juez.html" style="margin-right: 15px;">panel juez</a>` : '';
+
+            if (usuario.rol === 'PRESIDENTE') {
+                accionUsuario.innerHTML = `
+                    <a href="firma_a_ciegas.html" style="margin-right: 15px;">acciones presidente</a>
+                `;
+            }
 
             accionSesion.innerHTML = `
                 ${enlacePanel}
